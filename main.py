@@ -20,10 +20,19 @@ import json
 import sqlite3
 from cryptography.hazmat.primitives import serialization
 
+
+#-------------------------DELETE DATABASE-------------------------
+#delete all data from previous database created
+#so the *very sensitive* gradebot doesnt get upset if it is ran multiple times on the same server
+connect = sqlite3.connect('totally_not_my_privatekeys.db')
+cursor = connect.cursor()
+cursor.execute("DROP TABLE IF EXISTS keys;")
+connect.close()
+
+
 #-------------------------GLOBAL VARIABLES & FUNCTIONS-------------------------
 #JWKs - expired and unexpired
 keys = {"keys": []}
-JWKids = {}
 expired_keys = {"keys": []}
 
 #for JWT n modulus creation
@@ -39,10 +48,8 @@ def int_to_base64(value):
 
 #---------------------------RSA KEYS SETUP--------------------------
 def GenerateRSAkeys():
-  #generate private and public keys
+  #generate private key
   private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
-  #public_key = private_key.public_key()
 
   return private_key
 
@@ -68,7 +75,6 @@ def AddKeyToDatabase(kid, private_key, expiration):
   connect.close()
 
 
-
 #---------------------------JWK SETUP----------------------------
 def GenerateJWK(private_key, keyID, expired):
   #checks if an expired or unexpired JWK is requested
@@ -79,11 +85,8 @@ def GenerateJWK(private_key, keyID, expired):
     expiration = 1739978287
 
 
-  #generate n modulus
-  #public_key -> int -> bytes -> base64 -> string
+  #generate private key numbers for n modulus
   numbers = private_key.private_numbers()
-  
-
 
   #construct the jwk manually :(
   JWK = {
@@ -104,6 +107,7 @@ def GenerateKID():
   keyID = ''.join(random.choice(string.digits) for i in range(10))
 
   return keyID
+
 
 #---------------------------JWT SETUP----------------------------
 def GenerateJWT(private_key, keyID, expired):
@@ -135,6 +139,7 @@ def GenerateJWT(private_key, keyID, expired):
 
   return JWT
 
+
 #---------------------------HTTP SERVER SETUP----------------------------
 #Flask setup
 app = Flask("JWKServer")
@@ -152,40 +157,23 @@ class HTTP(Resource):
     for key in cursor.execute("SELECT * FROM keys"):
       kid = str(key[0])
       priv_key_bytes = key[1]
+      exp = key[2]
 
       #turn bytes into private key RSA object
-      priv_key = serialization.load_pem_private_key(priv_key_bytes, password=None)
-      
+      db_private_key = serialization.load_pem_private_key(priv_key_bytes, password=None)
 
       #generate JWK and append them to keys list
-      JWK = GenerateJWK(priv_key, kid, False)
-      
+      JWK = GenerateJWK(db_private_key, kid, False)
+
       if (JWK not in keys["keys"]):
         keys["keys"].append(JWK)
-    
+
     connect.close()
-    
+
     #returns all known, unexpired JWKs
     return keys
 
 api.add_resource(HTTP, "/.well-known/jwks.json")
-
-
-#request JWK based given kid
-class HTTPKid(Resource):
-  def get(self, kid):
-    #checks if kid is in unexpired key collection
-    #returns the corresponding JWK
-    for k in JWKids:
-      if k == kid:
-        return JWKids[k]
-
-      #else kid is in expired key collection
-      #returns 405
-      else:
-        return {'message': 'Key Not Allowed'}, 405
-
-api.add_resource(HTTPKid, "/.well-known/jwks.json/<kid>")
 
 
 #/auth endpoint
@@ -196,9 +184,7 @@ class HTTPAuth(Resource):
       keyID = GenerateKID()
       private_key = GenerateRSAkeys()
       expiration = 1739978287
-      
-      #generate unexpired JWK
-      #JWK = GenerateJWK(public_key, keyID, False)
+
 
       #add JWK and private key to database
       AddKeyToDatabase(keyID, private_key, expiration)
@@ -208,6 +194,7 @@ class HTTPAuth(Resource):
       connect = sqlite3.connect('totally_not_my_privatekeys.db')
       cursor = connect.cursor()
 
+      #collect first key/newly appended key from database
       result = cursor.execute("SELECT key FROM keys")
       db_private_key = result.fetchone()
       private_key = db_private_key[0]
@@ -215,11 +202,6 @@ class HTTPAuth(Resource):
 
       #create unexpired JWT
       JWT = GenerateJWT(private_key, keyID, False)
-
-      #add key to JWK dictionary 'keys'
-      #keys["keys"].append(JWK)
-
-      #JWKids[keyID] = JWK
 
       return Response(JWT, status=200, mimetype="application/jwt")
 
@@ -231,8 +213,6 @@ class HTTPAuth(Resource):
       private_key = GenerateRSAkeys()
       expiration = 1708355887
 
-      #generate unexpired JWK
-      #JWK = GenerateJWK(public_key, keyID, False)
 
       #add JWK and private key to database
       AddKeyToDatabase(keyID, private_key, expiration)
@@ -242,6 +222,7 @@ class HTTPAuth(Resource):
       connect = sqlite3.connect('totally_not_my_privatekeys.db')
       cursor = connect.cursor()
 
+      #collect first key/newly appended key from database
       result = cursor.execute("SELECT key FROM keys")
       db_private_key = result.fetchone()
       private_key = db_private_key[0]
@@ -249,9 +230,6 @@ class HTTPAuth(Resource):
 
       #generate expired JWT
       JWT = GenerateJWT(private_key, keyID, True)
-
-      #add key to expired key collection
-      #expired_keys["keys"].append(JWK)
 
       return Response(JWT, status=200, mimetype="application/jwt")
 
