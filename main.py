@@ -153,25 +153,31 @@ class HTTP(Resource):
     connect = sqlite3.connect('totally_not_my_privatekeys.db')
     cursor = connect.cursor()
 
-    #scan through database for kids and private RSA keys
-    for key in cursor.execute("SELECT * FROM keys"):
-      kid = str(key[0])
-      priv_key_bytes = key[1]
-      exp = key[2]
+    #try to get all unexpired keys from database
+    try:
+      #scan through database for kids and private RSA keys
+      for key in cursor.execute("SELECT * FROM keys WHERE exp = 1739978287"):
+        kid = str(key[0])
+        priv_key_bytes = key[1]
+        exp = key[2]
+  
+        #turn bytes into private key RSA object
+        db_private_key = serialization.load_pem_private_key(priv_key_bytes, password=None)
+  
+        #generate JWK and append them to keys list
+        JWK = GenerateJWK(db_private_key, kid, False)
+  
+        if (JWK not in keys["keys"]):
+          keys["keys"].append(JWK)
+  
+      connect.close()
+  
+      #returns all known, unexpired JWKs
+      return keys
 
-      #turn bytes into private key RSA object
-      db_private_key = serialization.load_pem_private_key(priv_key_bytes, password=None)
-
-      #generate JWK and append them to keys list
-      JWK = GenerateJWK(db_private_key, kid, False)
-
-      if (JWK not in keys["keys"]):
-        keys["keys"].append(JWK)
-
-    connect.close()
-
-    #returns all known, unexpired JWKs
-    return keys
+    #if table does not exist/no keys in database
+    except sqlite3.OperationalError:
+      return {'message': 'No keys in database'}
 
 api.add_resource(HTTP, "/.well-known/jwks.json")
 
