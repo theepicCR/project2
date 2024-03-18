@@ -1,3 +1,9 @@
+PACKAGE REQUIREMENTS:
+  * pyjwt version 2.8.0
+  * Flask-RESTful version 0.3.10
+  * Flask version 3.0.1
+  * pytest version 8.0.2
+
 RUN main.py INSTRUCTIONS:
   Type "python main.py" into the terminal.
 
