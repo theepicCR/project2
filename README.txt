@@ -4,11 +4,29 @@ PACKAGE REQUIREMENTS:
   * Flask version 3.0.1
   * pytest version 8.0.2
 
+OPTIONAL TOOLS:
+  * This program's testing instructions uses curl version 8.4.0, however other tools such as Postman, 
+    can be used.
+
 RUN main.py INSTRUCTIONS:
   Type "python main.py" into the terminal.
 
 RUN tests.py INSTRUCTIONS:
   Type "pytest -cov tests.py" into the terminal.
+
+ADD TO DATABASE INSTRUCTIONS:
+ * unexpired key:
+     Type "curl -X POST http://localhost:8080/auth" into the terminal
+ * expired key:
+     Type "curl -X POST http://localhost:8080/auth?expired=true" into the terminal.
+      - Run this command before running gradebot to ensure an expired is added to the database.
+
+EXTRACT FROM DATABASE INSTRUCTIONS:
+  Type "curl -X GET http://localhost:8080/.well-known/jwks.json" into the terminal.
+      - If the database is empty, the program will return with a message saying so.
+
+RUN GRADEBOT INSTRUCTIONS:
+  Type "./gradebot.exe project2" into the terminal.
 
 PROGRAM DESCRIPTION:
   * main.py
@@ -24,6 +42,9 @@ PROGRAM DESCRIPTION:
     This program is used to test the functionalities decribed in the main.py description.
 
 OTHER NOTES
+  * If Gradebot claims there this not an expired key in the database, run the expired key command found in
+    "ADD TO DATABASE" instructions and run Gradebot again.
+
   * Gradebot has the tendency to fluctuate the score of this program, main.py, often
     giving 45/65 (for a variety of different errors) to 65/65 points and vise versa.
     I depicted both scores in the Gradebot screenshot. However, I firmly believe the true score is 65/65
